@@ -36,6 +36,7 @@ class PPO(OnPolicyAlgorithm):
     :param gamma: Discount factor
     :param gae_lambda: Factor for trade-off of bias vs variance for Generalized Advantage Estimator
     :param clip_range: Clipping parameter, it can be a function of the current progress
+    -
         remaining (from 1 to 0).
     :param clip_range_vf: Clipping parameter for the value function,
         it can be a function of the current progress remaining (from 1 to 0).
@@ -89,6 +90,9 @@ class PPO(OnPolicyAlgorithm):
         seed: Optional[int] = None,
         device: Union[th.device, str] = "auto",
         _init_setup_model: bool = True,
+        loss_type: str = 'entropy',
+        prior=None,
+        ignore_reward=False
     ):
 
         super(PPO, self).__init__(
@@ -147,6 +151,11 @@ class PPO(OnPolicyAlgorithm):
         self.clip_range = clip_range
         self.clip_range_vf = clip_range_vf
         self.target_kl = target_kl
+        if loss_type not in ['entropy', 'forward_kl', 'reverse_kl']:
+            raise BaseException('No such loss_type: {}'.format(loss_type))
+        self.loss_type = loss_type
+        self.prior = prior
+        self.ignore_reward = ignore_reward
 
         if _init_setup_model:
             self._setup_model()
@@ -228,16 +237,35 @@ class PPO(OnPolicyAlgorithm):
                 value_loss = F.mse_loss(rollout_data.returns, values_pred)
                 value_losses.append(value_loss.item())
 
-                # Entropy loss favor exploration
-                if entropy is None:
-                    # Approximate entropy when no analytical form
-                    entropy_loss = -th.mean(-log_prob)
+                if self.loss_type == 'entropy':
+                    # Entropy loss favor exploration
+                    if entropy is None:
+                        # Approximate entropy when no analytical form
+                        entropy_loss = -th.mean(-log_prob)
+                    else:
+                        entropy_loss = -th.mean(entropy)
                 else:
-                    entropy_loss = -th.mean(entropy)
+                    # rollout_data.observations is of shape BATCH_SIZE x (HIDDEN_DIMENSION + 1) x 1
+                    pd = self.policy.get_distribution(rollout_data.observations).distribution
+                    # turn this policy distribution into a MultivariateNormal assuming independence of dimensions
+                    covs = []
+                    for i in range(pd.scale.shape[0]):
+                        covs.append(th.diag(pd.scale[i, :]))
+                    policy_dist = th.distributions.MultivariateNormal(pd.mean, th.stack(covs))
+                    prior_dist = self.prior(rollout_data.observations)
 
+                    if self.loss_type == 'forward_kl':
+                        entropy_loss = th.distributions.kl_divergence(prior_dist, policy_dist).mean()
+                    elif self.loss_type == 'reverse_kl':
+                        entropy_loss = th.distributions.kl_divergence(policy_dist, prior_dist).mean()
+                    else:
+                        raise NotImplementedError
                 entropy_losses.append(entropy_loss.item())
+                if self.ignore_reward:
 
-                loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
+                    loss = self.ent_coef * entropy_loss
+                else:
+                    loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
 
                 # Calculate approximate form of reverse KL Divergence for early stopping
                 # see issue #417: https://github.com/DLR-RM/stable-baselines3/issues/417
@@ -253,6 +281,14 @@ class PPO(OnPolicyAlgorithm):
                     if self.verbose >= 1:
                         print(f"Early stopping at step {epoch} due to reaching max kl: {approx_kl_div:.2f}")
                     break
+
+                # for parameter in self.policy.mlp_extractor.policy_net.parameters():
+                #     import pdb; pdb.set_trace()
+                #     print(parameter)
+                #     try:
+                #         print(parameter.size())
+                #     except:
+                #         print(parameter.size)
 
                 # Optimization step
                 self.policy.optimizer.zero_grad()
