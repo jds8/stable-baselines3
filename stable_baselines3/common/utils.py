@@ -154,15 +154,18 @@ def get_device(device: Union[th.device, str] = "auto") -> th.device:
     return device
 
 
-def get_latest_run_id(log_path: Optional[str] = None, log_name: str = "") -> int:
+def get_latest_run_id(log_path: str = "", log_name: str = "") -> int:
     """
     Returns the latest run number for the given log name and log path,
     by finding the greatest number in the directories.
 
+    :param log_path: Path to the log folder containing several runs.
+    :param log_name: Name of the experiment. Each run is stored
+        in a folder named ``log_name_1``, ``log_name_2``, ...
     :return: latest run number
     """
     max_run_id = 0
-    for path in glob.glob(f"{log_path}/{log_name}_[0-9]*"):
+    for path in glob.glob(os.path.join(log_path, f"{glob.escape(log_name)}_[0-9]*")):
         file_name = path.split(os.sep)[-1]
         ext = file_name.split("_")[-1]
         if log_name == "_".join(file_name.split("_")[:-1]) and ext.isdigit() and int(ext) > max_run_id:
@@ -262,7 +265,7 @@ def is_vectorized_discrete_observation(observation: Union[int, np.ndarray], obse
     else:
         raise ValueError(
             f"Error: Unexpected observation shape {observation.shape} for "
-            + "Discrete environment, please use (1,) or (n_env, 1) for the observation shape."
+            + "Discrete environment, please use () or (n_env,) for the observation shape."
         )
 
 
@@ -317,23 +320,38 @@ def is_vectorized_dict_observation(observation: np.ndarray, observation_space: g
     :param observation_space: the observation space
     :return: whether the given observation is vectorized or not
     """
+    # We first assume that all observations are not vectorized
+    all_non_vectorized = True
     for key, subspace in observation_space.spaces.items():
-        if observation[key].shape == subspace.shape:
-            return False
-
-    all_good = True
-
-    for key, subspace in observation_space.spaces.items():
-        if observation[key].shape[1:] != subspace.shape:
-            all_good = False
+        # This fails when the observation is not vectorized
+        # or when it has the wrong shape
+        if observation[key].shape != subspace.shape:
+            all_non_vectorized = False
             break
 
-    if all_good:
+    if all_non_vectorized:
+        return False
+
+    all_vectorized = True
+    # Now we check that all observation are vectorized and have the correct shape
+    for key, subspace in observation_space.spaces.items():
+        if observation[key].shape[1:] != subspace.shape:
+            all_vectorized = False
+            break
+
+    if all_vectorized:
         return True
     else:
+        # Retrieve error message
+        error_msg = ""
+        try:
+            is_vectorized_observation(observation[key], observation_space.spaces[key])
+        except ValueError as e:
+            error_msg = f"{e}"
         raise ValueError(
-            f"Error: Unexpected observation shape {observation.shape} for "
-            + f"Tuple environment, please use {(obs.shape for obs in observation_space.spaces)} "
+            f"There seems to be a mix of vectorized and non-vectorized observations. "
+            f"Unexpected observation shape {observation[key].shape} for key {key} "
+            f"of type {observation_space.spaces[key]}. {error_msg}"
         )
 
 

@@ -3,6 +3,211 @@
 Changelog
 ==========
 
+Release 1.6.1a0 (WIP)
+---------------------------
+
+Breaking Changes:
+^^^^^^^^^^^^^^^^^
+
+New Features:
+^^^^^^^^^^^^^
+
+SB3-Contrib
+^^^^^^^^^^^
+
+Bug Fixes:
+^^^^^^^^^^
+- Fixed the issue that ``predict`` does not always return action as ``np.ndarray`` (@qgallouedec)
+- Fixed division by zero error when computing FPS when a small number of time has elapsed in operating systems with low-precision timers.
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Others:
+^^^^^^^
+
+Documentation:
+^^^^^^^^^^^^^^
+- Fixed typo in docstring "nature" -> "Nature" (@Melanol)
+- Added info on split tensorboard logs into (@Melanol)
+- Fixed typo in ppo doc (@francescoluciano)
+- Fixed typo in install doc(@jlp-ue)
+
+
+Release 1.6.0 (2022-07-11)
+---------------------------
+
+**Recurrent PPO (PPO LSTM), better defaults for learning from pixels with SAC/TD3**
+
+Breaking Changes:
+^^^^^^^^^^^^^^^^^
+- Changed the way policy "aliases" are handled ("MlpPolicy", "CnnPolicy", ...), removing the former
+  ``register_policy`` helper, ``policy_base`` parameter and using ``policy_aliases`` static attributes instead (@Gregwar)
+- SB3 now requires PyTorch >= 1.11
+- Changed the default network architecture when using ``CnnPolicy`` or ``MultiInputPolicy`` with SAC or DDPG/TD3,
+  ``share_features_extractor`` is now set to False by default and the ``net_arch=[256, 256]`` (instead of ``net_arch=[]`` that was before)
+
+New Features:
+^^^^^^^^^^^^^
+
+SB3-Contrib
+^^^^^^^^^^^
+- Added Recurrent PPO (PPO LSTM). See https://github.com/Stable-Baselines-Team/stable-baselines3-contrib/pull/53
+
+
+Bug Fixes:
+^^^^^^^^^^
+- Fixed saving and loading large policies greater than 2GB (@jkterry1, @ycheng517)
+- Fixed final goal selection strategy that did not sample the final achieved goal (@qgallouedec)
+- Fixed a bug with special characters in the tensorboard log name (@quantitative-technologies)
+- Fixed a bug in ``DummyVecEnv``'s and ``SubprocVecEnv``'s seeding function. None value was unchecked (@ScheiklP)
+- Fixed a bug where ``EvalCallback`` would crash when trying to synchronize ``VecNormalize`` stats when observation normalization was disabled
+- Added a check for unbounded actions
+- Fixed issues due to newer version of protobuf (tensorboard) and sphinx
+- Fix exception causes all over the codebase (@cool-RR)
+- Prohibit simultaneous use of optimize_memory_usage and handle_timeout_termination due to a bug (@MWeltevrede)
+- Fixed a bug in ``kl_divergence`` check that would fail when using numpy arrays with MultiCategorical distribution
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Others:
+^^^^^^^
+- Upgraded to Python 3.7+ syntax using ``pyupgrade``
+- Removed redundant double-check for nested observations from ``BaseAlgorithm._wrap_env`` (@TibiGG)
+
+Documentation:
+^^^^^^^^^^^^^^
+- Added link to gym doc and gym env checker
+- Fix typo in PPO doc (@bcollazo)
+- Added link to PPO ICLR blog post
+- Added remark about breaking Markov assumption and timeout handling
+- Added doc about MLFlow integration via custom logger (@git-thor)
+- Updated Huggingface integration doc
+- Added copy button for code snippets
+- Added doc about EnvPool and Isaac Gym support
+
+
+Release 1.5.0 (2022-03-25)
+---------------------------
+
+**Bug fixes, early stopping callback**
+
+Breaking Changes:
+^^^^^^^^^^^^^^^^^
+- Switched minimum Gym version to 0.21.0.
+
+New Features:
+^^^^^^^^^^^^^
+- Added ``StopTrainingOnNoModelImprovement`` to callback collection (@caburu)
+- Makes the length of keys and values in ``HumanOutputFormat`` configurable,
+  depending on desired maximum width of output.
+- Allow PPO to turn of advantage normalization (see `PR #763 <https://github.com/DLR-RM/stable-baselines3/pull/763>`_) @vwxyzjn
+
+SB3-Contrib
+^^^^^^^^^^^
+- coming soon: Cross Entropy Method, see https://github.com/Stable-Baselines-Team/stable-baselines3-contrib/pull/62
+
+Bug Fixes:
+^^^^^^^^^^
+- Fixed a bug in ``VecMonitor``. The monitor did not consider the ``info_keywords`` during stepping (@ScheiklP)
+- Fixed a bug in ``HumanOutputFormat``. Distinct keys truncated to the same prefix would overwrite each others value,
+  resulting in only one being output. This now raises an error (this should only affect a small fraction of use cases
+  with very long keys.)
+- Routing all the ``nn.Module`` calls through implicit rather than explict forward as per pytorch guidelines (@manuel-delverme)
+- Fixed a bug in ``VecNormalize`` where error occurs when ``norm_obs`` is set to False for environment with dictionary observation  (@buoyancy99)
+- Set default ``env`` argument to ``None`` in ``HerReplayBuffer.sample`` (@qgallouedec)
+- Fix ``batch_size`` typing in ``DQN`` (@qgallouedec)
+- Fixed sample normalization in ``DictReplayBuffer`` (@qgallouedec)
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Others:
+^^^^^^^
+- Fixed pytest warnings
+- Removed parameter ``remove_time_limit_termination`` in off policy algorithms since it was dead code (@Gregwar)
+
+Documentation:
+^^^^^^^^^^^^^^
+- Added doc on Hugging Face integration (@simoninithomas)
+- Added furuta pendulum project to project list (@armandpl)
+- Fix indentation 2 spaces to 4 spaces in custom env documentation example (@Gautam-J)
+- Update MlpExtractor docstring (@gianlucadecola)
+- Added explanation of the logger output
+- Update ``Directly Accessing The Summary Writer`` in tensorboard integration (@xy9485)
+
+Release 1.4.0 (2022-01-18)
+---------------------------
+
+*TRPO, ARS and multi env training for off-policy algorithms*
+
+Breaking Changes:
+^^^^^^^^^^^^^^^^^
+- Dropped python 3.6 support (as announced in previous release)
+- Renamed ``mask`` argument of the ``predict()`` method to ``episode_start`` (used with RNN policies only)
+- local variables ``action``, ``done`` and ``reward`` were renamed to their plural form for offpolicy algorithms (``actions``, ``dones``, ``rewards``),
+  this may affect custom callbacks.
+- Removed ``episode_reward`` field from ``RolloutReturn()`` type
+
+
+.. warning::
+
+    An update to the ``HER`` algorithm is planned to support multi-env training and remove the max episode length constrain.
+    (see `PR #704 <https://github.com/DLR-RM/stable-baselines3/pull/704>`_)
+    This will be a backward incompatible change (model trained with previous version of ``HER`` won't work with the new version).
+
+
+
+New Features:
+^^^^^^^^^^^^^
+- Added ``norm_obs_keys`` param for ``VecNormalize`` wrapper to configure which observation keys to normalize (@kachayev)
+- Added experimental support to train off-policy algorithms with multiple envs (note: ``HerReplayBuffer`` currently not supported)
+- Handle timeout termination properly for on-policy algorithms (when using ``TimeLimit``)
+- Added ``skip`` option to ``VecTransposeImage`` to skip transforming the channel order when the heuristic is wrong
+- Added ``copy()`` and ``combine()`` methods to ``RunningMeanStd``
+
+SB3-Contrib
+^^^^^^^^^^^
+- Added Trust Region Policy Optimization (TRPO) (@cyprienc)
+- Added Augmented Random Search (ARS) (@sgillen)
+- Coming soon: PPO LSTM, see https://github.com/Stable-Baselines-Team/stable-baselines3-contrib/pull/53
+
+Bug Fixes:
+^^^^^^^^^^
+- Fixed a bug where ``set_env()`` with ``VecNormalize`` would result in an error with off-policy algorithms (thanks @cleversonahum)
+- FPS calculation is now performed based on number of steps performed during last ``learn`` call, even when ``reset_num_timesteps`` is set to ``False`` (@kachayev)
+- Fixed evaluation script for recurrent policies (experimental feature in SB3 contrib)
+- Fixed a bug where the observation would be incorrectly detected as non-vectorized instead of throwing an error
+- The env checker now properly checks and warns about potential issues for continuous action spaces when the boundaries are too small or when the dtype is not float32
+- Fixed a bug in ``VecFrameStack`` with channel first image envs, where the terminal observation would be wrongly created.
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Others:
+^^^^^^^
+- Added a warning in the env checker when not using ``np.float32`` for continuous actions
+- Improved test coverage and error message when checking shape of observation
+- Added ``newline="\n"`` when opening CSV monitor files so that each line ends with ``\r\n`` instead of ``\r\r\n`` on Windows while Linux environments are not affected (@hsuehch)
+- Fixed ``device`` argument inconsistency (@qgallouedec)
+
+Documentation:
+^^^^^^^^^^^^^^
+- Add drivergym to projects page (@theDebugger811)
+- Add highway-env to projects page (@eleurent)
+- Add tactile-gym to projects page (@ac-93)
+- Fix indentation in the RL tips page (@cove9988)
+- Update GAE computation docstring
+- Add documentation on exporting to TFLite/Coral
+- Added JMLR paper and updated citation
+- Added link to RL Tips and Tricks video
+- Updated ``BaseAlgorithm.load`` docstring (@Demetrio92)
+- Added a note on ``load`` behavior in the examples (@Demetrio92)
+- Updated SB3 Contrib doc
+- Fixed A2C and migration guide guidance on how to set epsilon with RMSpropTFLike (@thomasgubler)
+- Fixed custom policy documentation (@IperGiove)
+- Added doc on Weights & Biases integration
 
 Release 1.3.0 (2021-10-23)
 ---------------------------
@@ -25,18 +230,19 @@ Breaking Changes:
     - ``rollout/exploration rate`` to ``rollout/exploration_rate`` and
     - ``rollout/success rate`` to ``rollout/success_rate``.
 
+
 New Features:
 ^^^^^^^^^^^^^
 - Added methods ``get_distribution`` and ``predict_values`` for ``ActorCriticPolicy`` for A2C/PPO/TRPO (@cyprienc)
 - Added methods ``forward_actor`` and ``forward_critic`` for ``MlpExtractor``
 - Added ``sb3.get_system_info()`` helper function to gather version information relevant to SB3 (e.g., Python and PyTorch version)
-- Saved models now store system information where agent was trained, and load functions have ``print_system_info`` parameter to help debugging load issues.
+- Saved models now store system information where agent was trained, and load functions have ``print_system_info`` parameter to help debugging load issues
 
 Bug Fixes:
 ^^^^^^^^^^
 - Fixed ``dtype`` of observations for ``SimpleMultiObsEnv``
 - Allow `VecNormalize` to wrap discrete-observation environments to normalize reward
-  when observation normalization is disabled.
+  when observation normalization is disabled
 - Fixed a bug where ``DQN`` would throw an error when using ``Discrete`` observation and stochastic actions
 - Fixed a bug where sub-classed observation spaces could not be used
 - Added ``force_reset`` argument to ``load()`` and ``set_env()`` in order to be able to call ``learn(reset_num_timesteps=False)`` with a new environment
@@ -804,4 +1010,10 @@ And all the contributors:
 @tirafesi @blurLake @koulakis @joeljosephjin @shwang @rk37 @andyshih12 @RaphaelWag @xicocaio
 @diditforlulz273 @liorcohen5 @ManifoldFR @mloo3 @SwamyDev @wmmc88 @megan-klaiber @thisray
 @tfederico @hn2 @LucasAlegre @AptX395 @zampanteymedio @JadenTravnik @decodyng @ardabbour @lorenz-h @mschweizer @lorepieri8 @vwxyzjn
-@ShangqunYu @PierreExeter @JacopoPan @ltbd78 @tom-doerr @Atlis @liusida @09tangriro @amy12xx @juancroldan @benblack769 @bstee615 @c-rizz @skandermoalla @MihaiAnca13 @davidblom603 @ayeright @cyprienc @wkirgsn @AechPro @CUN-bjy @batu @IljaAvadiev @timokau
+@ShangqunYu @PierreExeter @JacopoPan @ltbd78 @tom-doerr @Atlis @liusida @09tangriro @amy12xx @juancroldan
+@benblack769 @bstee615 @c-rizz @skandermoalla @MihaiAnca13 @davidblom603 @ayeright @cyprienc
+@wkirgsn @AechPro @CUN-bjy @batu @IljaAvadiev @timokau @kachayev @cleversonahum
+@eleurent @ac-93 @cove9988 @theDebugger811 @hsuehch @Demetrio92 @thomasgubler @IperGiove @ScheiklP
+@simoninithomas @armandpl @manuel-delverme @Gautam-J @gianlucadecola @buoyancy99 @caburu @xy9485
+@Gregwar @ycheng517 @quantitative-technologies @bcollazo @git-thor @TibiGG @cool-RR @MWeltevrede
+@Melanol @qgallouedec @francescoluciano @jlp-ue

@@ -26,15 +26,31 @@ You can also define custom logging name when training (by default it is the algo
     model.learn(total_timesteps=10_000, tb_log_name="first_run")
     # Pass reset_num_timesteps=False to continue the training curve in tensorboard
     # By default, it will create a new curve
+    # Keep tb_log_name constant to have continuous curve (see note below)
     model.learn(total_timesteps=10_000, tb_log_name="second_run", reset_num_timesteps=False)
     model.learn(total_timesteps=10_000, tb_log_name="third_run", reset_num_timesteps=False)
 
+
+.. note::
+    If you specify different ``tb_log_name`` in subsequent runs, you will have split graphs, like in the figure below.
+    If you want them to be continuous, you must keep the same ``tb_log_name`` (see `issue #975 <https://github.com/DLR-RM/stable-baselines3/issues/975#issuecomment-1198992211>`_).
+    And, if you still managed to get your graphs split by other means, just put tensorboard log files into the same folder.
+
+    .. image:: ../_static/img/split_graph.png
+      :width: 330
+      :alt: split_graph
 
 Once the learn function is called, you can monitor the RL agent during or after the training, with the following bash command:
 
 .. code-block:: bash
 
   tensorboard --logdir ./a2c_cartpole_tensorboard/
+
+
+.. note::
+
+	You can find explanations about the logger output and names in the :ref:`Logger <logger>` section.
+
 
 you can also add past logging folders:
 
@@ -61,7 +77,7 @@ Here is a simple example on how to log both additional tensor or arbitrary scala
     from stable_baselines3 import SAC
     from stable_baselines3.common.callbacks import BaseCallback
 
-    model = SAC("MlpPolicy", "Pendulum-v0", tensorboard_log="/tmp/sac/", verbose=1)
+    model = SAC("MlpPolicy", "Pendulum-v1", tensorboard_log="/tmp/sac/", verbose=1)
 
 
     class TensorboardCallback(BaseCallback):
@@ -104,7 +120,7 @@ Here is an example of how to render an image to TensorBoard at regular intervals
     from stable_baselines3.common.callbacks import BaseCallback
     from stable_baselines3.common.logger import Image
 
-    model = SAC("MlpPolicy", "Pendulum-v0", tensorboard_log="/tmp/sac/", verbose=1)
+    model = SAC("MlpPolicy", "Pendulum-v1", tensorboard_log="/tmp/sac/", verbose=1)
 
 
     class ImageRecorderCallback(BaseCallback):
@@ -141,7 +157,7 @@ Here is an example of how to store a plot in TensorBoard at regular intervals:
     from stable_baselines3.common.callbacks import BaseCallback
     from stable_baselines3.common.logger import Figure
 
-    model = SAC("MlpPolicy", "Pendulum-v0", tensorboard_log="/tmp/sac/", verbose=1)
+    model = SAC("MlpPolicy", "Pendulum-v1", tensorboard_log="/tmp/sac/", verbose=1)
 
 
     class FigureRecorderCallback(BaseCallback):
@@ -251,7 +267,7 @@ can get direct access to the underlying SummaryWriter in a callback:
 
 
 
-    model = SAC("MlpPolicy", "Pendulum-v0", tensorboard_log="/tmp/sac/", verbose=1)
+    model = SAC("MlpPolicy", "Pendulum-v1", tensorboard_log="/tmp/sac/", verbose=1)
 
 
     class SummaryWriterCallback(BaseCallback):
@@ -259,7 +275,7 @@ can get direct access to the underlying SummaryWriter in a callback:
         def _on_training_start(self):
             self._log_freq = 1000  # log every 1000 calls
 
-            output_formats = self.logger.Logger.CURRENT.output_formats
+            output_formats = self.logger.output_formats
             # Save reference to tensorboard formatter object
             # note: the failure case (not formatter found) is not handled here, should be done with try/except.
             self.tb_formatter = next(formatter for formatter in output_formats if isinstance(formatter, TensorBoardOutputFormat))

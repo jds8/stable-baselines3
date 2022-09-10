@@ -6,6 +6,15 @@ Projects
 This is a list of projects using stable-baselines3.
 Please tell us, if you want your project to appear on this page ;)
 
+DriverGym
+---------
+
+An open-source Gym-compatible environment specifically tailored for developing RL algorithms for autonomous driving. DriverGym provides access to more than 1000 hours of expert logged data and also supports reactive and data-driven agent behavior. The performance of an RL policy can be easily validated using an extensive and flexible closed-loop evaluation protocol. We also provide behavior cloning baselines using supervised learning and RL, trained in DriverGym.
+
+| Authors: Parth Kothari, Christian Perone, Luca Bergamini, Alexandre Alahi, Peter Ondruska
+| Github: https://github.com/lyft/l5kit
+| Paper: https://arxiv.org/abs/2111.06889 
+
 
 RL Reach
 --------
@@ -26,6 +35,17 @@ It was the starting point of Stable-Baselines3.
 | Author: Antonin Raffin, Freek Stulp
 | Github: https://github.com/DLR-RM/stable-baselines3/tree/sde
 | Paper: https://arxiv.org/abs/2005.05719
+
+
+Furuta Pendulum Robot
+---------------------
+
+Everything you need to build and train a rotary inverted pendulum, also know as a furuta pendulum! This makes use of gSDE listed above.   
+The Github repository contains code, CAD files and a bill of materials for you to build the robot. You can watch `a video overview of the project here <https://www.youtube.com/watch?v=Y6FVBbqjR40>`_.
+
+| Authors: Armand du Parc Locmaria, Pierre Fabre
+| Github: https://github.com/Armandpl/furuta
+
 
 Reacher
 -------
@@ -93,10 +113,10 @@ A fully custom python API and C++ DLL to treat the popular game Rocket League li
 gym-electric-motor
 -------------------
 
-An OpenAI gym environment for the simulation and control of electric drive trains. 
+An OpenAI gym environment for the simulation and control of electric drive trains.
 Think of Matlab/Simulink for electric motors, inverters, and load profiles, but non-graphical and open-source in Python.
 
-`gym-electric-motor` offers a rich interface for customization, including 
+`gym-electric-motor` offers a rich interface for customization, including
 - plug-and-play of different control algorithms ranging from classical controllers (like field-oriented control) up to any RL agent you can find,
 - reward shaping,
 - load profiling,
@@ -120,3 +140,24 @@ A PyTorch implementation of Policy Distillation for control, which has well-trai
 | Authors: Junyeob Baek
 | GitHub: https://github.com/CUN-bjy/policy-distillation-baselines
 | Demo: `link <https://github.com/CUN-bjy/policy-distillation-baselines/issues/3#issuecomment-817730173>`_
+
+highway-env
+-------------------
+
+A minimalist environment for decision-making in Autonomous Driving.
+
+Driving policies can be trained in different scenarios, and several notebooks using SB3 are provided as examples.
+
+| Author: `Edouard Leurent <https://edouardleurent.com>`_
+| GitHub: https://github.com/eleurent/highway-env
+| Examples: `Colab Links <https://github.com/eleurent/highway-env/tree/master/scripts#using-stable-baselines3>`_
+
+tactile-gym
+-------------------
+
+Suite of RL environments focussed on using a simulated tactile sensor as the primary source of observations. Sim-to-Real results across 4 out of 5 proposed envs.
+
+| Author: Alex Church
+| GitHub: https://github.com/ac-93/tactile_gym
+| Paper: https://arxiv.org/abs/2106.08796
+| Website: `tactile-gym website <https://sites.google.com/my.bristol.ac.uk/tactile-gym-sim2real/home>`_

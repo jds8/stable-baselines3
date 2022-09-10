@@ -1,3 +1,6 @@
+import operator
+import warnings
+
 import gym
 import numpy as np
 import pytest
@@ -14,7 +17,7 @@ from stable_baselines3.common.vec_env import (
     unwrap_vec_normalize,
 )
 
-ENV_ID = "Pendulum-v0"
+ENV_ID = "Pendulum-v1"
 
 
 class DummyRewardEnv(gym.Env):
@@ -44,7 +47,7 @@ class DummyDictEnv(gym.GoalEnv):
     """
 
     def __init__(self):
-        super(DummyDictEnv, self).__init__()
+        super().__init__()
         self.observation_space = spaces.Dict(
             {
                 "observation": spaces.Box(low=-20.0, high=20.0, shape=(4,), dtype=np.float32),
@@ -66,6 +69,31 @@ class DummyDictEnv(gym.GoalEnv):
     def compute_reward(self, achieved_goal: np.ndarray, desired_goal: np.ndarray, _info) -> np.float32:
         distance = np.linalg.norm(achieved_goal - desired_goal, axis=-1)
         return -(distance > 0).astype(np.float32)
+
+
+class DummyMixedDictEnv(gym.Env):
+    """
+    Dummy mixed gym env for testing purposes
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.observation_space = spaces.Dict(
+            {
+                "obs1": spaces.Box(low=-20.0, high=20.0, shape=(4,), dtype=np.float32),
+                "obs2": spaces.Discrete(1),
+                "obs3": spaces.Box(low=-20.0, high=20.0, shape=(4,), dtype=np.float32),
+            }
+        )
+        self.action_space = spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32)
+
+    def reset(self):
+        return self.observation_space.sample()
+
+    def step(self, action):
+        obs = self.observation_space.sample()
+        done = np.random.rand() > 0.8
+        return obs, 0.0, done, {}
 
 
 def allclose(obs_1, obs_2):
@@ -93,7 +121,7 @@ def make_dict_env():
 def test_deprecation():
     venv = DummyVecEnv([lambda: gym.make("CartPole-v1")])
     venv = VecNormalize(venv)
-    with pytest.warns(None) as record:
+    with warnings.catch_warnings(record=True) as record:
         assert np.allclose(venv.ret, venv.returns)
     # Deprecation warning when using .ret
     assert len(record) == 1
@@ -152,9 +180,9 @@ def _make_warmstart_cartpole():
     return _make_warmstart(lambda: gym.make("CartPole-v1"))
 
 
-def _make_warmstart_dict_env():
-    """Warm-start VecNormalize by stepping through BitFlippingEnv"""
-    return _make_warmstart(make_dict_env)
+def _make_warmstart_dict_env(**kwargs):
+    """Warm-start VecNormalize by stepping through DummyDictEnv"""
+    return _make_warmstart(make_dict_env, **kwargs)
 
 
 def test_runningmeanstd():
@@ -173,6 +201,38 @@ def test_runningmeanstd():
         moments_2 = [rms.mean, rms.var]
 
         assert np.allclose(moments_1, moments_2)
+
+
+def test_combining_stats():
+    np.random.seed(4)
+    for shape in [(1,), (3,), (3, 4)]:
+        values = []
+        rms_1 = RunningMeanStd(shape=shape)
+        rms_2 = RunningMeanStd(shape=shape)
+        rms_3 = RunningMeanStd(shape=shape)
+        for _ in range(15):
+            value = np.random.randn(*shape)
+            rms_1.update(value)
+            rms_3.update(value)
+            values.append(value)
+        for _ in range(19):
+            # Shift the values
+            value = np.random.randn(*shape) + 1.0
+            rms_2.update(value)
+            rms_3.update(value)
+            values.append(value)
+        rms_1.combine(rms_2)
+        assert np.allclose(rms_3.mean, rms_1.mean)
+        assert np.allclose(rms_3.var, rms_1.var)
+        rms_4 = rms_3.copy()
+        assert np.allclose(rms_4.mean, rms_3.mean)
+        assert np.allclose(rms_4.var, rms_3.var)
+        assert np.allclose(rms_4.count, rms_3.count)
+        assert id(rms_4.mean) != id(rms_3.mean)
+        assert id(rms_4.var) != id(rms_3.var)
+        x_cat = np.concatenate(values, axis=0)
+        assert np.allclose(x_cat.mean(axis=0), rms_4.mean)
+        assert np.allclose(x_cat.var(axis=0), rms_4.var)
 
 
 def test_obs_rms_vec_normalize():
@@ -267,6 +327,21 @@ def test_normalize_external():
     assert np.all(norm_rewards < 1)
 
 
+def test_normalize_dict_selected_keys():
+    venv = _make_warmstart_dict_env(norm_obs=True, norm_obs_keys=["observation"])
+    for _ in range(3):
+        actions = [venv.action_space.sample()]
+        obs, rewards, _, _ = venv.step(actions)
+        orig_obs = venv.get_original_obs()
+
+        # "observation" is expected to be normalized
+        np.testing.assert_array_compare(operator.__ne__, obs["observation"], orig_obs["observation"])
+        assert allclose(venv.normalize_obs(orig_obs), obs)
+
+        # other keys are expected to be presented "as is"
+        np.testing.assert_array_equal(obs["achieved_goal"], orig_obs["achieved_goal"])
+
+
 @pytest.mark.parametrize("model_class", [SAC, TD3, HerReplayBuffer])
 @pytest.mark.parametrize("online_sampling", [False, True])
 def test_offpolicy_normalization(model_class, online_sampling):
@@ -299,6 +374,13 @@ def test_offpolicy_normalization(model_class, online_sampling):
     else:
         model = model_class("MlpPolicy", env, verbose=1, learning_starts=100, policy_kwargs=dict(net_arch=[64]))
 
+    # Check that VecNormalize object is correctly updated
+    assert model.get_vec_normalize_env() is env
+    model.set_env(eval_env)
+    assert model.get_vec_normalize_env() is eval_env
+    model.learn(total_timesteps=10)
+    model.set_env(env)
+
     model.learn(total_timesteps=150, eval_env=eval_env, eval_freq=75)
     # Check getter
     assert isinstance(model.get_vec_normalize_env(), VecNormalize)
@@ -306,11 +388,11 @@ def test_offpolicy_normalization(model_class, online_sampling):
 
 @pytest.mark.parametrize("make_env", [make_env, make_dict_env])
 def test_sync_vec_normalize(make_env):
-    env = DummyVecEnv([make_env])
+    original_env = DummyVecEnv([make_env])
 
-    assert unwrap_vec_normalize(env) is None
+    assert unwrap_vec_normalize(original_env) is None
 
-    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=100.0, clip_reward=100.0)
+    env = VecNormalize(original_env, norm_obs=True, norm_reward=True, clip_obs=100.0, clip_reward=100.0)
 
     assert isinstance(unwrap_vec_normalize(env), VecNormalize)
 
@@ -351,6 +433,17 @@ def test_sync_vec_normalize(make_env):
     assert allclose(obs, eval_env.normalize_obs(original_obs))
     assert allclose(env.normalize_reward(dummy_rewards), eval_env.normalize_reward(dummy_rewards))
 
+    # Check synchronization when only reward is normalized
+    env = VecNormalize(original_env, norm_obs=False, norm_reward=True, clip_reward=100.0)
+    eval_env = DummyVecEnv([make_env])
+    eval_env = VecNormalize(eval_env, training=False, norm_obs=False, norm_reward=False)
+    env.reset()
+    env.step([env.action_space.sample()])
+    assert not np.allclose(env.ret_rms.mean, eval_env.ret_rms.mean)
+    sync_envs_normalization(env, eval_env)
+    assert np.allclose(env.ret_rms.mean, eval_env.ret_rms.mean)
+    assert np.allclose(env.ret_rms.var, eval_env.ret_rms.var)
+
 
 def test_discrete_obs():
     with pytest.raises(ValueError, match=".*only supports.*"):
@@ -358,3 +451,17 @@ def test_discrete_obs():
 
     # Smoke test that it runs with norm_obs False
     _make_warmstart_cliffwalking(norm_obs=False)
+
+
+def test_non_dict_obs_keys():
+    with pytest.raises(ValueError, match=".*is applicable only.*"):
+        _make_warmstart(lambda: DummyRewardEnv(), norm_obs_keys=["key"])
+
+    with pytest.raises(ValueError, match=".* explicitely pass the observation keys.*"):
+        _make_warmstart(lambda: DummyMixedDictEnv())
+
+    # Ignore Discrete observation key
+    _make_warmstart(lambda: DummyMixedDictEnv(), norm_obs_keys=["obs1", "obs3"])
+
+    # Test dict obs with norm_obs set to False
+    _make_warmstart(lambda: DummyMixedDictEnv(), norm_obs=False)

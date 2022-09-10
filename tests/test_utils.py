@@ -5,6 +5,7 @@ import gym
 import numpy as np
 import pytest
 import torch as th
+from gym import spaces
 
 import stable_baselines3 as sb3
 from stable_baselines3 import A2C, PPO
@@ -13,7 +14,7 @@ from stable_baselines3.common.env_util import is_wrapped, make_atari_env, make_v
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import ActionNoise, OrnsteinUhlenbeckActionNoise, VectorizedActionNoise
-from stable_baselines3.common.utils import get_system_info, polyak_update, zip_strict
+from stable_baselines3.common.utils import get_system_info, is_vectorized_observation, polyak_update, zip_strict
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 
@@ -42,7 +43,6 @@ def test_make_vec_env(env_id, n_envs, vec_env_cls, wrapper_class):
 @pytest.mark.parametrize("n_envs", [1, 2])
 @pytest.mark.parametrize("wrapper_kwargs", [None, dict(clip_reward=False, screen_size=60)])
 def test_make_atari_env(env_id, n_envs, wrapper_kwargs):
-    env_id = "BreakoutNoFrameskip-v4"
     env = make_atari_env(env_id, n_envs, wrapper_kwargs=wrapper_kwargs, monitor_dir=None, seed=0)
 
     assert env.num_envs == n_envs
@@ -96,7 +96,7 @@ def test_vec_env_monitor_kwargs():
 
 
 def test_env_auto_monitor_wrap():
-    env = gym.make("Pendulum-v0")
+    env = gym.make("Pendulum-v1")
     model = A2C("MlpPolicy", env)
     assert model.env.env_is_wrapped(Monitor)[0] is True
 
@@ -104,7 +104,7 @@ def test_env_auto_monitor_wrap():
     model = A2C("MlpPolicy", env)
     assert model.env.env_is_wrapped(Monitor)[0] is True
 
-    model = A2C("MlpPolicy", "Pendulum-v0")
+    model = A2C("MlpPolicy", "Pendulum-v1")
     assert model.env.env_is_wrapped(Monitor)[0] is True
 
 
@@ -136,7 +136,7 @@ def test_custom_vec_env(tmp_path):
 
 
 def test_evaluate_policy():
-    model = A2C("MlpPolicy", "Pendulum-v0", seed=0)
+    model = A2C("MlpPolicy", "Pendulum-v1", seed=0)
     n_steps_per_episode, n_eval_episodes = 200, 2
     model.n_callback_calls = 0
 
@@ -166,7 +166,7 @@ def test_evaluate_policy():
     assert len(episode_rewards) == n_eval_episodes
 
     # Test that warning is given about no monitor
-    eval_env = gym.make("Pendulum-v0")
+    eval_env = gym.make("Pendulum-v1")
     with pytest.warns(UserWarning):
         _ = evaluate_policy(model, eval_env, n_eval_episodes)
 
@@ -180,7 +180,7 @@ class AlwaysDoneWrapper(gym.Wrapper):
     # Pretends that environment only has single step for each
     # episode.
     def __init__(self, env):
-        super(AlwaysDoneWrapper, self).__init__(env)
+        super().__init__(env)
         self.last_obs = None
         self.needs_reset = True
 
@@ -355,7 +355,7 @@ def test_zip_strict():
 
 def test_is_wrapped():
     """Test that is_wrapped correctly detects wraps"""
-    env = gym.make("Pendulum-v0")
+    env = gym.make("Pendulum-v1")
     env = gym.Wrapper(env)
     assert not is_wrapped(env, Monitor)
     monitor_env = Monitor(env)
@@ -372,11 +372,11 @@ def test_ppo_warnings():
 
     # Only 1 step: advantage normalization will return NaN
     with pytest.raises(AssertionError):
-        PPO("MlpPolicy", "Pendulum-v0", n_steps=1)
+        PPO("MlpPolicy", "Pendulum-v1", n_steps=1)
 
     # Truncated mini-batch
     with pytest.warns(UserWarning):
-        PPO("MlpPolicy", "Pendulum-v0", n_steps=6, batch_size=8)
+        PPO("MlpPolicy", "Pendulum-v1", n_steps=6, batch_size=8)
 
 
 def test_get_system_info():
@@ -387,3 +387,79 @@ def test_get_system_info():
     assert "GPU Enabled" in info_str
     assert "Numpy" in info_str
     assert "Gym" in info_str
+
+
+def test_is_vectorized_observation():
+    # with pytest.raises("ValueError"):
+    #     pass
+    # All vectorized
+    box_space = spaces.Box(-1, 1, shape=(2,))
+    box_obs = np.ones((1,) + box_space.shape)
+    assert is_vectorized_observation(box_obs, box_space)
+
+    discrete_space = spaces.Discrete(2)
+    discrete_obs = np.ones((3,), dtype=np.int8)
+    assert is_vectorized_observation(discrete_obs, discrete_space)
+
+    multidiscrete_space = spaces.MultiDiscrete([2, 3])
+    multidiscrete_obs = np.ones((1, 2), dtype=np.int8)
+    assert is_vectorized_observation(multidiscrete_obs, multidiscrete_space)
+
+    multibinary_space = spaces.MultiBinary(3)
+    multibinary_obs = np.ones((1, 3), dtype=np.int8)
+    assert is_vectorized_observation(multibinary_obs, multibinary_space)
+
+    dict_space = spaces.Dict({"box": box_space, "discrete": discrete_space})
+    dict_obs = {"box": box_obs, "discrete": discrete_obs}
+    assert is_vectorized_observation(dict_obs, dict_space)
+
+    # All not vectorized
+    box_obs = np.ones(box_space.shape)
+    assert not is_vectorized_observation(box_obs, box_space)
+
+    discrete_obs = np.ones((), dtype=np.int8)
+    assert not is_vectorized_observation(discrete_obs, discrete_space)
+
+    multidiscrete_obs = np.ones((2,), dtype=np.int8)
+    assert not is_vectorized_observation(multidiscrete_obs, multidiscrete_space)
+
+    multibinary_obs = np.ones((3,), dtype=np.int8)
+    assert not is_vectorized_observation(multibinary_obs, multibinary_space)
+
+    dict_obs = {"box": box_obs, "discrete": discrete_obs}
+    assert not is_vectorized_observation(dict_obs, dict_space)
+
+    # A mix of vectorized and non-vectorized things
+    with pytest.raises(ValueError):
+        discrete_obs = np.ones((1,), dtype=np.int8)
+        dict_obs = {"box": box_obs, "discrete": discrete_obs}
+        is_vectorized_observation(dict_obs, dict_space)
+
+    # Vectorized with the wrong shape
+    with pytest.raises(ValueError):
+        discrete_obs = np.ones((1,), dtype=np.int8)
+        box_obs = np.ones((1, 2) + box_space.shape)
+        dict_obs = {"box": box_obs, "discrete": discrete_obs}
+        is_vectorized_observation(dict_obs, dict_space)
+
+    # Weird shape: error
+    with pytest.raises(ValueError):
+        discrete_obs = np.ones((1,) + box_space.shape, dtype=np.int8)
+        is_vectorized_observation(discrete_obs, discrete_space)
+
+    # wrong shape
+    with pytest.raises(ValueError):
+        multidiscrete_obs = np.ones((2, 1), dtype=np.int8)
+        is_vectorized_observation(multidiscrete_obs, multidiscrete_space)
+
+    # wrong shape
+    with pytest.raises(ValueError):
+        multibinary_obs = np.ones((2, 1), dtype=np.int8)
+        is_vectorized_observation(multidiscrete_obs, multibinary_space)
+
+    # Almost good shape: one dimension too much for Discrete obs
+    with pytest.raises(ValueError):
+        box_obs = np.ones((1,) + box_space.shape)
+        discrete_obs = np.ones((1, 1), dtype=np.int8)
+        dict_obs = {"box": box_obs, "discrete": discrete_obs}
+        is_vectorized_observation(dict_obs, dict_space)

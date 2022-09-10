@@ -36,7 +36,7 @@ class Monitor(gym.Wrapper):
         reset_keywords: Tuple[str, ...] = (),
         info_keywords: Tuple[str, ...] = (),
     ):
-        super(Monitor, self).__init__(env=env)
+        super().__init__(env=env)
         self.t_start = time.time()
         if filename is not None:
             self.results_writer = ResultsWriter(
@@ -110,7 +110,7 @@ class Monitor(gym.Wrapper):
         """
         Closes the environment
         """
-        super(Monitor, self).close()
+        super().close()
         if self.results_writer is not None:
             self.results_writer.close()
 
@@ -178,7 +178,8 @@ class ResultsWriter:
                 filename = os.path.join(filename, Monitor.EXT)
             else:
                 filename = filename + "." + Monitor.EXT
-        self.file_handler = open(filename, "wt")
+        # Prevent newline issue on Windows, see GH issue #692
+        self.file_handler = open(filename, "wt", newline="\n")
         self.file_handler.write("#%s\n" % json.dumps(header))
         self.logger = csv.DictWriter(self.file_handler, fieldnames=("r", "l", "t") + extra_keys)
         self.logger.writeheader()
@@ -223,7 +224,7 @@ def load_results(path: str) -> pandas.DataFrame:
         raise LoadMonitorResultsError(f"No monitor files of the form *{Monitor.EXT} found in {path}")
     data_frames, headers = [], []
     for file_name in monitor_files:
-        with open(file_name, "rt") as file_handler:
+        with open(file_name) as file_handler:
             first_line = file_handler.readline()
             assert first_line[0] == "#"
             header = json.loads(first_line[1:])

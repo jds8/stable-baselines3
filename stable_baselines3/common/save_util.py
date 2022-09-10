@@ -206,8 +206,8 @@ def open_path(path: Union[str, pathlib.Path, io.BufferedIOBase], mode: str, verb
     mode = mode.lower()
     try:
         mode = {"write": "w", "read": "r", "w": "w", "r": "r"}[mode]
-    except KeyError:
-        raise ValueError("Expected mode to be either 'w' or 'r'.")
+    except KeyError as e:
+        raise ValueError("Expected mode to be either 'w' or 'r'.") from e
     if ("w" == mode) and not path.writable() or ("r" == mode) and not path.readable():
         e1 = "writable" if "w" == mode else "readable"
         raise ValueError(f"Expected a {e1} file.")
@@ -314,11 +314,11 @@ def save_to_zip_file(
         if data is not None:
             archive.writestr("data", serialized_data)
         if pytorch_variables is not None:
-            with archive.open("pytorch_variables.pth", mode="w") as pytorch_variables_file:
+            with archive.open("pytorch_variables.pth", mode="w", force_zip64=True) as pytorch_variables_file:
                 th.save(pytorch_variables, pytorch_variables_file)
         if params is not None:
             for file_name, dict_ in params.items():
-                with archive.open(file_name + ".pth", mode="w") as param_file:
+                with archive.open(file_name + ".pth", mode="w", force_zip64=True) as param_file:
                     th.save(dict_, param_file)
         # Save metadata: library version when file was saved
         archive.writestr("_stable_baselines3_version", sb3.__version__)
@@ -441,7 +441,7 @@ def load_from_zip_file(
                         # State dicts. Store into params dictionary
                         # with same name as in .zip file (without .pth)
                         params[os.path.splitext(file_path)[0]] = th_object
-    except zipfile.BadZipFile:
+    except zipfile.BadZipFile as e:
         # load_path wasn't a zip file
-        raise ValueError(f"Error: the file {load_path} wasn't a zip-file")
+        raise ValueError(f"Error: the file {load_path} wasn't a zip-file") from e
     return data, params, pytorch_variables
